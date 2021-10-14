@@ -1,10 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -21,12 +20,13 @@ import (
 )
 
 var (
-	ErrShutdown   = errors.New("shutdown")
-	ErrUnknown    = errors.New("unknown")
+	//errShutdown   = errors.New("shutdown")
+	//shutdownRegex = regexp.MustCompile(`^\[.+]\[.+]: .+=(\d+) rcon='shutdown'$`)
 	ctx           context.Context
 	cancel        context.CancelFunc
 	cfgSplitRegex = regexp.MustCompile(`autoexec_(.+)_([^_]+)\.cfg$`)
-	shutdownRegex = regexp.MustCompile(`^\[.+]\[.+]: .+=(\d+) rcon='shutdown'$`)
+
+	debug *bool
 )
 
 func printUsage() {
@@ -42,6 +42,35 @@ Usage:
 
 func init() {
 	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+	debug = flag.Bool("debug", false, "use it to show more information")
+	flag.Parse()
+
+	args := []string{}
+	args = append(args, os.Args[0])
+	if len(os.Args) > 1 {
+		os.Args = os.Args[1:]
+	}
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "--") {
+			continue
+		}
+		args = append(args, arg)
+	}
+
+	os.Args = args
+}
+
+func DebugPrintln(a ...interface{}) {
+	if *debug {
+		log.Println(a...)
+	}
+}
+
+func DebugPrintf(format string, a ...interface{}) {
+	if *debug {
+		log.Printf(format, a...)
+	}
 }
 
 type Config struct {
@@ -79,56 +108,21 @@ func (c *Config) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		err := logFile.Close()
-		if err != nil {
-			log.Printf("failed to close log file: %s: %v\n", logFile.Name(), err)
-		}
-	}()
-	logWriter, errC := analyzeLogs(logFile) // analyze server logs
 	var stderr bytes.Buffer
 	// write output into file
-	cmd.Stdout = logWriter
+	cmd.Stdout = logFile
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
+	logFile.Close()
+
 	if err != nil && stderr.Len() > 0 {
 		log.Printf("error: %s\n%s\n", c.Cmd(), stderr.String())
 	} else {
 		log.Printf("stopped: %s\n", c.Cmd())
 	}
-	logErr := <-errC
-	if logErr != nil {
-		return logErr
-	}
+
 	return err
-}
-
-func analyzeLogs(logFile ...io.Writer) (io.Writer, <-chan error) {
-	errC := make(chan error, 1)
-
-	pipeReader, pipeWriter := io.Pipe()
-	logWriter := io.MultiWriter(io.MultiWriter(logFile...), pipeWriter)
-
-	go func() {
-		defer close(errC)
-		defer pipeReader.Close()
-		defer pipeWriter.Close()
-
-		lineScanner := bufio.NewScanner(pipeReader)
-		for lineScanner.Scan() {
-			line := lineScanner.Text()
-			if shutdownRegex.MatchString(line) {
-				// admin stopped server ingame/econ
-				errC <- ErrShutdown
-				return
-			}
-		}
-		// unknown shutdown reason
-		errC <- nil
-	}()
-
-	return logWriter, errC
 }
 
 func constructConfigs(execPath, cfgPath, execMatch, cfgMatch string) []Config {

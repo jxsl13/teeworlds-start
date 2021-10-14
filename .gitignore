@@ -6,6 +6,7 @@ executables/*
 logs/*
 maps/*
 configs/*
+**.demo
 
 !executables/*.md
 !logs/*.md
@@ -13,3 +14,4 @@ configs/*
 !configs/*.md
 !storage.cfg
 !Makefile
+maps/LICENSE.md
