@@ -12,5 +12,5 @@ ZIP_FILE_PATH="${ZIP_PATH}/$(date +%Y-%m-%d)_ranking.tar.gz"
 mkdir -p ${ZIP_PATH}
 
 # find demos of 30 days ago.
-find ${DB_PATH} -type f -name '*.dv' -mtime +30 -print0 | tar -czvf ${ZIP_FILE_PATH} --remove-files --null -T -
+find ${DB_PATH} -type f -name '*.db' -mtime +30 -print0 | tar -czvf ${ZIP_FILE_PATH} --remove-files --null -T -
 
