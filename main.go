@@ -25,7 +25,7 @@ var (
 	ErrUnknown    = errors.New("unknown")
 	ctx           context.Context
 	cancel        context.CancelFunc
-	cfgSplitRegex = regexp.MustCompile(`^autoexec_(.+)_([^_]+)\.cfg$`)
+	cfgSplitRegex = regexp.MustCompile(`autoexec_(.+)_([^_]+)\.cfg$`)
 	shutdownRegex = regexp.MustCompile(`^\[.+]\[.+]: .+=(\d+) rcon='shutdown'$`)
 )
 
