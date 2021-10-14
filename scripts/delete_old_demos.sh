@@ -6,6 +6,5 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 DEMO_PATH="$(realpath $SCRIPT_DIR)"
 AUTO_DEMO_PATH="${DEMO_PATH}/auto"
 
-
 # delete demos older than 30 days
 find ${AUTO_DEMO_PATH} -name "*.demo" -type f -mtime +30 -exec rm {} \; 
