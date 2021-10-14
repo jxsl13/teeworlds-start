@@ -87,7 +87,7 @@ func (c *Config) Cmd() string {
 func (c *Config) LogFile() (*os.File, error) {
 	fileName := filepath.Base(c.ConfigFile)
 	fileNameWithoutExt := fileName[:len(fileName)-len(filepath.Ext(fileName))]
-	logFilePath := fmt.Sprintf("./logs/%s-%s.log", fileNameWithoutExt, time.Now().Format("2006-01-02-15:04:05.000"))
+	logFilePath := fmt.Sprintf("./logs/%s-%s.log", fileNameWithoutExt, time.Now().Format("2006-01-02-15.04.05"))
 	f, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create log file: %w", err)
