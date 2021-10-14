@@ -1,0 +1,15 @@
+**.cfg
+**.map
+executables/*
+logs/*
+
+
+
+
+
+
+
+
+
+!executables/*.md
+!logs/*.md
