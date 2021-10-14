@@ -1,15 +1,15 @@
-**.cfg
-**.map
+teeworlds-start
+teeworlds-start.exe
+masters.cfg
+
 executables/*
 logs/*
-
-
-
-
-
-
-
-
+maps/*
+configs/*
 
 !executables/*.md
 !logs/*.md
+!maps/*.md
+!configs/*.md
+!storage.cfg
+!Makefile
