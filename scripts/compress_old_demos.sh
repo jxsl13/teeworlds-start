@@ -7,7 +7,7 @@ DEMO_PATH="$(realpath $SCRIPT_DIR)"
 AUTO_DEMO_PATH="${DEMO_PATH}/auto/"
 
 ZIP_PATH="${DEMO_PATH}/auto/old/"
-ZIP_FILE_PATH="${ZIP_PATH}/$(date +%Y-%m-%d)_demos.tar.gz"
+ZIP_FILE_PATH="${ZIP_PATH}/$(date -d "$(date) - 30 days" +%Y-%m-%d)_demos.tar.gz"
 
 # create backup directory if it doesn't exist
 mkdir -p ${ZIP_PATH}

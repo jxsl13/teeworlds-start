@@ -5,7 +5,7 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 LOGS_PATH="$(realpath $SCRIPT_DIR)"
 
 ZIP_PATH="${LOGS_PATH}/old/"
-ZIP_FILE_PATH="${ZIP_PATH}/$(date +%Y-%m-%d)_logs.tar.gz"
+ZIP_FILE_PATH="${ZIP_PATH}/$(date -d "$(date) - 30 days" +%Y-%m-%d)_logs.tar.gz"
 
 # create backup directory if it doesn't exist
 mkdir -p ${ZIP_PATH}
