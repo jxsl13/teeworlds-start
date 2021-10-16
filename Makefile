@@ -9,18 +9,18 @@ start: build
 
 # build alias
 build:
-	go build .
+	go build -race .
 
 # build for llinux
 linux:
-	env GOOS=linux GOARCH=amd64 go build .
+	env GOOS=linux GOARCH=amd64 go build -race .
 
 windows:
-	env GOOS=windows GOARCH=amd64 go build .
+	env GOOS=windows GOARCH=amd64 go build -race .
 
 macos:
-	env GOOS=darwin GOARCH=amd64 go build .
+	env GOOS=darwin GOARCH=amd64 go build -race .
 
 macos-arm:
-	env GOOS=darwin GOARCH=arm64 go build .
+	env GOOS=darwin GOARCH=arm64 go build -race .
 

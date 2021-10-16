@@ -51,8 +51,8 @@ func init() {
 	if len(os.Args) > 1 {
 		os.Args = os.Args[1:]
 	}
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "--") {
+	for idx, arg := range os.Args {
+		if idx == 0 || strings.HasPrefix(arg, "--") {
 			continue
 		}
 		args = append(args, arg)
@@ -148,12 +148,11 @@ func constructConfigs(execPath, cfgPath, execMatch, cfgMatch string) []Config {
 		if ext == "" || ext == "exe" {
 			executable := filepath.Base(fileName)
 			if execRegex.MatchString(executable) {
-				log.Printf("found executable: %s\n", executable)
+				log.Printf("found executable (matchig '%s'): %s\n", execMatch, executable)
+				executables[executable] = true
 			} else {
-				log.Printf("skipped executable: %s\n", executable)
-				continue
+				log.Printf("skipped executable (not matching '%s'): %s\n", execMatch, executable)
 			}
-			executables[executable] = true
 		}
 	}
 
