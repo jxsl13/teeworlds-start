@@ -302,6 +302,7 @@ func (c *Config) Run() (err error) {
 			return nil
 		case <-time.After(durationUntilNextStartup):
 			log.Printf("scheduled startup: %s\n", c.Cmd())
+			log.Printf("will be shut down: %v: %s (%s)\n", shutdownDeadline, c.Cmd(), shutdownDeadline.Sub(time.Now()).String())
 			err := c.runSingleWithRestart(deadlineContext)
 			if err != nil {
 				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
