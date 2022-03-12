@@ -280,7 +280,7 @@ func (c *Config) Run() (err error) {
 	case <-c.ShutdownContext.Done():
 		log.Printf("shutdown before starting: %s\n", c.Cmd())
 		return nil
-	case <-time.After(c.StartupOffset):
+	case <-time.After(c.StartupOffset / 4):
 		// make console output ordered
 	}
 
@@ -294,14 +294,13 @@ func (c *Config) Run() (err error) {
 		shutdownDeadline := c.StopTimes[idx]
 		deadlineContext, _ := context.WithDeadline(c.ShutdownContext, shutdownDeadline)
 
-		log.Printf("startup scheduled: %v: %s", offsetStartUp, c.Cmd())
-		after := time.After(durationUntilNextStartup)
+		log.Printf("startup scheduled: %v: %s (%s)", offsetStartUp, c.Cmd(), durationUntilNextStartup.String())
 
 		select {
 		case <-c.ShutdownContext.Done():
 			log.Printf("shutdown: %s\n", c.Cmd())
 			return nil
-		case <-after:
+		case <-time.After(durationUntilNextStartup):
 			log.Printf("scheduled startup: %s\n", c.Cmd())
 			err := c.runSingleWithRestart(deadlineContext)
 			if err != nil {
