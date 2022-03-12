@@ -95,7 +95,6 @@ func init() {
 	}
 
 	os.Args = args
-	DebugPrintf("args: %v\n", args)
 }
 
 func DebugPrintln(a ...interface{}) {
@@ -343,7 +342,7 @@ func main() {
 	execRegex := ".*"
 	cfgRegex := ".*"
 
-	DebugPrintf("os.args: %v\n", os.Args)
+	log.Printf("os.args: %v\n", os.Args)
 
 	if len(os.Args) >= 2 {
 		execRegex = os.Args[1]
@@ -352,8 +351,8 @@ func main() {
 		cfgRegex = os.Args[2]
 	}
 
-	DebugPrintf("binary regex: %s\n", execRegex)
-	DebugPrintf("config regex: %s\n", cfgRegex)
+	log.Printf("binary regex: %s\n", execRegex)
+	log.Printf("config regex: %s\n", cfgRegex)
 
 	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
 	wg := sync.WaitGroup{}
