@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,17 +23,23 @@ import (
 var (
 	//errShutdown   = errors.New("shutdown")
 	//shutdownRegex = regexp.MustCompile(`^\[.+]\[.+]: .+=(\d+) rcon='shutdown'$`)
-	ctx           context.Context
-	cancel        context.CancelFunc
+
 	cfgSplitRegex = regexp.MustCompile(`autoexec_(.+)_([^_]+)\.cfg$`)
 
-	debug *bool
+	debug      *bool
+	startTimes []time.Time
+	stopTimes  []time.Time
 )
 
 func printUsage() {
 	log.Print(`
 Usage: 
 	./teeworlds-start [zcatch_srv] ['-t0\d']
+
+		You may use this flag in order to add times when the server should start and stop.
+		You can provide more than two values. The provided values must be a multiple of 2.
+	    --times '2021-04-01-13.00.00;2021-04-02-18.00.0'
+                Start time;stop time
 	
 	1. Executable
 	2. Optional regular expression to match the teeworlds server executable 
@@ -41,10 +48,39 @@ Usage:
 }
 
 func init() {
-	ctx, cancel = signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	help := flag.Bool("help", false, "show help screen")
 	debug = flag.Bool("debug", false, "use it to show more information")
+	times := flag.String("times", "", "start;stop;start;stop.. dates in the format of 2006-12-30-15.04.05")
 	flag.Parse()
+
+	if help != nil && *help {
+		printUsage()
+		os.Exit(0)
+	}
+
+	if times != nil && *times != "" {
+		parts := strings.Split(*times, ";")
+		if len(parts)%2 != 0 {
+			fmt.Println("--times requires the number of dates to be a multiple of 2")
+			os.Exit(1)
+		}
+
+		for idx, part := range parts {
+			t, err := time.Parse("2006-01-02-15.04.05", part)
+			if err != nil {
+				fmt.Printf("'%s' is not a valid date and time value\n", part)
+				os.Exit(1)
+			}
+			if idx%2 == 0 {
+				// start times
+				startTimes = append(startTimes, t)
+			} else {
+				// stop time
+				stopTimes = append(stopTimes, t)
+			}
+		}
+	}
 
 	args := []string{}
 	args = append(args, os.Args[0])
@@ -78,6 +114,12 @@ type Config struct {
 	Executable string
 	ID         string
 	Log        io.Writer
+
+	StartupOffset time.Duration
+	StartTimes    []time.Time
+	StopTimes     []time.Time
+
+	ShutdownContext context.Context
 }
 
 func (c *Config) Cmd() string {
@@ -95,7 +137,48 @@ func (c *Config) LogFile() (*os.File, error) {
 	return f, nil
 }
 
-func (c *Config) Run() (err error) {
+func (c *Config) runSingleWithRestart(shutdownContext context.Context) (err error) {
+	restartCounter := 0
+	timeUntilRestart := time.Duration(0)
+	for {
+		select {
+		case <-shutdownContext.Done():
+			log.Printf("closing restart routine: %s\n", c.Cmd())
+			return
+		default:
+			if restartCounter == 0 {
+				log.Printf("starting: %s\n", c.Cmd())
+			} else {
+				log.Printf("restarting: %s\n", c.Cmd())
+			}
+
+			if restartCounter > 5 && timeUntilRestart/time.Duration(restartCounter) < 60*time.Second {
+				log.Printf("stopped: %s: reason: too many restarts within a short period\n", c.Cmd())
+				return errors.New("too many restarts within a short period")
+			}
+
+			start := time.Now()
+			err := c.runSingle(shutdownContext)
+			timeUntilRestart = time.Since(start)
+			if err != nil {
+				log.Printf("stopped: %s: reason: %v\n", c.Cmd(), err)
+				if strings.Contains(err.Error(), "exec format error") {
+					log.Printf("please use a different executable '%s', as it seems not to have been built for your operating system.\n", c.Executable)
+					return err
+				} else if strings.Contains(err.Error(), "exit status 255") {
+					log.Printf("make sure that your defined ports are not blocked: %s\n", c.ConfigFile)
+					time.Sleep(10 * time.Second)
+				}
+			} else {
+				log.Printf("stopped: %s: reason: %v\n", c.Cmd(), err)
+			}
+
+			time.Sleep(3 * time.Second)
+		}
+	}
+}
+
+func (c *Config) runSingle(shutdownContext context.Context) (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -103,18 +186,19 @@ func (c *Config) Run() (err error) {
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx, c.Executable, "-f", c.ConfigFile)
+	cmd := exec.CommandContext(shutdownContext, c.Executable, "-f", c.ConfigFile)
 	logFile, err := c.LogFile()
 	if err != nil {
 		return err
 	}
+	defer logFile.Close()
+
 	var stderr bytes.Buffer
 	// write output into file
 	cmd.Stdout = logFile
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
-	logFile.Close()
 
 	if err != nil && stderr.Len() > 0 {
 		log.Printf("error: %s\n%s\n", c.Cmd(), stderr.String())
@@ -122,10 +206,56 @@ func (c *Config) Run() (err error) {
 		log.Printf("stopped: %s\n", c.Cmd())
 	}
 
-	return err
+	select {
+	case <-shutdownContext.Done():
+		// command stopped due to shutdown context.
+		return nil
+	default:
+		// command stopped due to error
+		return err
+	}
 }
 
-func constructConfigs(execPath, cfgPath, execMatch, cfgMatch string) []Config {
+func (c *Config) Run() (err error) {
+
+	if len(c.StartTimes) == 0 {
+		return c.runSingle(c.ShutdownContext)
+	}
+
+	// start/stop logic
+	if len(c.StartTimes) != len(c.StopTimes) {
+		return errors.New("start/stop times mismatch")
+	}
+
+	for idx, start := range c.StartTimes {
+		now := time.Now()
+		durationUntilNextStartup := start.Sub(now.Add(c.StartupOffset))
+		if durationUntilNextStartup < 0 {
+			durationUntilNextStartup = c.StartupOffset
+		}
+		shutdownDeadline := c.StopTimes[idx]
+		deadlineContext, _ := context.WithDeadline(c.ShutdownContext, shutdownDeadline)
+
+		select {
+		case <-c.ShutdownContext.Done():
+			log.Printf("shutdown: %s\n", c.Cmd())
+			return nil
+		case <-time.After(durationUntilNextStartup):
+			log.Printf("scheduled startup: %s\n", c.Cmd())
+			err := c.runSingleWithRestart(deadlineContext)
+			if err != nil {
+				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
+				return err
+			}
+			log.Printf("scheduled shutdown: %s\n", c.Cmd())
+		}
+	}
+
+	log.Printf("exhausted startup schedules: %s\n", c.Cmd())
+	return nil
+}
+
+func constructConfigs(shutdownContext context.Context, execPath, cfgPath, execMatch, cfgMatch string, startupTimes, stopTimes []time.Time) []Config {
 	execRegex := regexp.MustCompile(execMatch)
 	cfgRegex := regexp.MustCompile(cfgMatch)
 
@@ -162,7 +292,7 @@ func constructConfigs(execPath, cfgPath, execMatch, cfgMatch string) []Config {
 	}
 
 	// get config files that actually match the executable
-	for _, file := range cf {
+	for idx, file := range cf {
 		if file.IsDir() {
 			continue
 		}
@@ -184,6 +314,12 @@ func constructConfigs(execPath, cfgPath, execMatch, cfgMatch string) []Config {
 				ConfigFile: path.Join(cfgPath, fileName),
 				Executable: path.Join(execPath, exec),
 				ID:         matches[2],
+
+				ShutdownContext: shutdownContext,
+
+				StartupOffset: time.Duration(idx) * time.Second,
+				StartTimes:    startupTimes,
+				StopTimes:     stopTimes,
 			})
 		}
 	}
@@ -195,8 +331,9 @@ func buildPathEnv(directories ...string) string {
 }
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	printUsage()
+	defer printUsage()
 
 	executablesPath := "./executables"
 	configsPath := "./configs"
@@ -212,60 +349,21 @@ func main() {
 
 	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
 	wg := sync.WaitGroup{}
-	cfgs := constructConfigs(executablesPath, configsPath, execRegex, cfgRegex)
+	cfgs := constructConfigs(ctx, executablesPath, configsPath, execRegex, cfgRegex, startTimes, stopTimes)
 
 	wg.Add(len(cfgs))
 	for idx, c := range cfgs {
-		go func(index int, c Config) {
+		c.StartupOffset = time.Second * time.Duration(idx)
+		go func(c Config) {
 			defer wg.Done()
 
-			select {
-			case <-ctx.Done():
-				log.Printf("closing restart routine early: %s \n", c.Cmd())
+			err := c.Run()
+			if err != nil {
+				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
 				return
-			case <-time.After(time.Duration(index) * time.Second):
-				// continue
 			}
-
-			restartCounter := 0
-			timeUntilRestart := time.Duration(0)
-			for {
-				select {
-				case <-ctx.Done():
-					log.Printf("closing restart routine: %s \n", c.Cmd())
-					return
-				default:
-					if restartCounter == 0 {
-						log.Printf("starting: %s\n", c.Cmd())
-					} else {
-						log.Printf("restarting: %s\n", c.Cmd())
-					}
-
-					if restartCounter > 5 && timeUntilRestart/time.Duration(restartCounter) < 60*time.Second {
-						log.Printf("stopped: %s: reason: too many restarts within a short period\n", c.Cmd())
-						return
-					}
-
-					start := time.Now()
-					err := c.Run()
-					timeUntilRestart = time.Since(start)
-					if err != nil {
-						log.Printf("stopped: %s: reason: %v\n", c.Cmd(), err)
-						if strings.Contains(err.Error(), "exec format error") {
-							log.Printf("slease use a different executable '%s', as it seems not to have been built for your operating system.\n", c.Executable)
-							return
-						} else if strings.Contains(err.Error(), "exit status 255") {
-							log.Printf("make sure that your defined ports are not blocked: %s\n", c.ConfigFile)
-							time.Sleep(10 * time.Second)
-						}
-					} else {
-						log.Printf("stopped: %s: reason: %v\n", c.Cmd(), err)
-					}
-
-					time.Sleep(3 * time.Second)
-				}
-			}
-		}(idx, c)
+			log.Printf("successful shutdown: %s\n", c.Cmd())
+		}(c)
 	}
 
 	wg.Wait()
