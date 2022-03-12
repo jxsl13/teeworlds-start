@@ -27,8 +27,8 @@ var (
 	cfgSplitRegex = regexp.MustCompile(`autoexec_(.+)_([^_]+)\.cfg$`)
 
 	debug      *bool
-	startTimes []time.Time
-	stopTimes  []time.Time
+	startTimes []time.Time = make([]time.Time, 0)
+	stopTimes  []time.Time = make([]time.Time, 0)
 )
 
 func printUsage() {
@@ -362,6 +362,9 @@ func main() {
 	if len(startTimes) > 0 && len(startTimes) == len(stopTimes) {
 		log.Printf("scheduled startups: %v\n", startTimes)
 		log.Printf("scheduled shutdown: %v\n", stopTimes)
+	} else if len(startTimes) > 0 && len(startTimes) != len(stopTimes) {
+		log.Println("stat/stop times mismatch")
+		os.Exit(1)
 	}
 
 	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
