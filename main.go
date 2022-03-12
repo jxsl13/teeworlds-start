@@ -117,9 +117,8 @@ func init() {
 				//shutdown
 				startupSchedule := startTimes[len(startTimes)-1]
 				if startupSchedule == t || startupSchedule.After(t) {
-					log.Printf("WARING: shutdown schedule %s lies before or at the startup schedule %s\n", t.String(), startupSchedule.String())
-					log.Println("WARNING: moving shutdown schedule 5 seconds after startup schedule.")
-					t = startupSchedule.Add(5 * time.Second)
+					log.Printf("ERROR: shutdown schedule %s lies before or at the startup schedule %s\n", t.String(), startupSchedule.String())
+					os.Exit(1)
 				}
 				stopTimes = append(stopTimes, t)
 			}
