@@ -94,6 +94,8 @@ func init() {
 			"2006-01-02",
 		}
 
+		oneStartupInPast := false
+
 		for idx, part := range parts {
 			var (
 				t   time.Time
@@ -112,6 +114,17 @@ func init() {
 				os.Exit(1)
 			} else if idx%2 == 0 {
 				// startup
+				if time.Until(t) < 0 {
+					if !oneStartupInPast {
+						t = time.Now().Add(5 * time.Second)
+						oneStartupInPast = true
+					} else {
+						// one startup already in past
+						log.Println("ERROR: only one startup schedule may be in the past")
+						os.Exit(1)
+					}
+				}
+
 				startTimes = append(startTimes, t)
 			} else {
 				//shutdown
