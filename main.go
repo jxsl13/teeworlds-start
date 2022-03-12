@@ -343,8 +343,6 @@ func main() {
 	execRegex := ".*"
 	cfgRegex := ".*"
 
-	log.Printf("os.args: %v\n", os.Args)
-
 	if len(os.Args) >= 2 {
 		execRegex = os.Args[1]
 	}
