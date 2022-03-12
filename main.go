@@ -359,6 +359,11 @@ func main() {
 	log.Printf("binary regex: %s\n", execRegex)
 	log.Printf("config regex: %s\n", cfgRegex)
 
+	if len(startTimes) > 0 && len(startTimes) == len(stopTimes) {
+		log.Printf("scheduled startups: %v\n", startTimes)
+		log.Printf("scheduled shutdown: %v\n", stopTimes)
+	}
+
 	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
 	wg := sync.WaitGroup{}
 	cfgs := constructConfigs(ctx, executablesPath, configsPath, execRegex, cfgRegex, startTimes, stopTimes)
