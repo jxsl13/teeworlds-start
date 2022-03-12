@@ -26,24 +26,28 @@ var (
 
 	cfgSplitRegex = regexp.MustCompile(`autoexec_(.+)_([^_]+)\.cfg$`)
 
-	debug      *bool
-	startTimes []time.Time = make([]time.Time, 0)
-	stopTimes  []time.Time = make([]time.Time, 0)
+	debug *bool
+
+	executablesRegex *regexp.Regexp
+	configRegex      *regexp.Regexp
+
+	executablesDir string
+	configsDir     string
+	startTimes     []time.Time = make([]time.Time, 0)
+	stopTimes      []time.Time = make([]time.Time, 0)
 )
 
 func printUsage() {
 	log.Print(`
 Usage: 
-	./teeworlds-start [zcatch_srv] ['-t0\d']
+	./teeworlds-start --executables 'zcatch_.*' --configs '_t0\d.*'
 
-		You may use this flag in order to add times when the server should start and stop.
-		You can provide more than two values. The provided values must be a multiple of 2.
-	    --times '2021-04-01-13.00.00,2021-04-02-18.00.0'
-                Start time;stop time
+	--configs-dir		./configs
+	--executables-dir	./executables
+
+	--times '2021-04-01-13.00.00,2021-04-02-18.00.00'
+		Provide a start stop schedule list separated by ','
 	
-	1. Executable
-	2. Optional regular expression to match the teeworlds server executable 
-	3. requires 2 and adds a regular expression for config files.
 	`)
 }
 
@@ -51,6 +55,10 @@ func init() {
 
 	help := flag.Bool("help", false, "show help screen")
 	debug = flag.Bool("debug", false, "use it to show more information")
+	cfgDir := flag.String("configs-dir", "./configs", "directorythat contains your configuration files (autoexec.cfg).")
+	cfg := flag.String("configs", ".*", "regular expression to match the config file suffix")
+	execDir := flag.String("executables-dir", "./executables", "directory that contains your teeworlds gameserver executables (zcatch_srv, gctf_srv).")
+	exec := flag.String("executables", ".*", "regular expression to match the server executable")
 	times := flag.String("times", "", "start,stop,start,stop.. dates in the format of 2006-12-30-15.04.05")
 	flag.Parse()
 
@@ -58,8 +66,21 @@ func init() {
 		printUsage()
 		os.Exit(0)
 	}
+	executablesDir = *execDir
+	configsDir = *cfgDir
 
-	if times != nil && *times != "" {
+	var err error
+	executablesRegex, err = regexp.Compile(*exec)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	configRegex, err = regexp.Compile(*cfg)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if *times != "" {
 		parts := strings.Split(*times, ",")
 		if len(parts)%2 != 0 {
 			fmt.Println("--times requires the number of dates to be a multiple of 2")
@@ -81,21 +102,42 @@ func init() {
 			}
 		}
 	}
+}
 
-	args := []string{}
-	args = append(args, os.Args[0])
-	if len(os.Args) > 1 {
-		os.Args = os.Args[1:]
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	defer printUsage()
+
+	if len(startTimes) > 0 && len(startTimes) == len(stopTimes) {
+		log.Printf("scheduled startups: %v\n", startTimes)
+		log.Printf("scheduled shutdown: %v\n", stopTimes)
+	} else if len(startTimes) > 0 && len(startTimes) != len(stopTimes) {
+		log.Println("stat/stop times mismatch")
+		os.Exit(1)
 	}
 
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "--") {
-			continue
-		}
-		args = append(args, arg)
+	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesDir))
+	wg := sync.WaitGroup{}
+	cfgs := constructConfigs(ctx, executablesDir, configsDir, executablesRegex, configRegex, startTimes, stopTimes)
+
+	wg.Add(len(cfgs))
+	for idx, c := range cfgs {
+		c.StartupOffset = time.Second * time.Duration(idx)
+		go func(c Config) {
+			defer wg.Done()
+
+			err := c.Run()
+			if err != nil {
+				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
+				return
+			}
+			log.Printf("successful shutdown: %s\n", c.Cmd())
+		}(c)
 	}
 
-	os.Args = args
+	wg.Wait()
+	log.Println("finished execution.")
 }
 
 func DebugPrintln(a ...interface{}) {
@@ -264,9 +306,9 @@ func (c *Config) Run() (err error) {
 	return nil
 }
 
-func constructConfigs(shutdownContext context.Context, execPath, cfgPath, execMatch, cfgMatch string, startupTimes, stopTimes []time.Time) []Config {
-	execRegex := regexp.MustCompile(execMatch)
-	cfgRegex := regexp.MustCompile(cfgMatch)
+func constructConfigs(shutdownContext context.Context, execPath, cfgPath string, execRegex, cfgRegex *regexp.Regexp, startupTimes, stopTimes []time.Time) []Config {
+
+	execMatch := execRegex.String()
 
 	// read files in current dir
 	ef, err := os.ReadDir(execPath)
@@ -337,55 +379,4 @@ func constructConfigs(shutdownContext context.Context, execPath, cfgPath, execMa
 
 func buildPathEnv(directories ...string) string {
 	return strings.Join(directories, ":")
-}
-
-func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	defer printUsage()
-
-	executablesPath := "./executables"
-	configsPath := "./configs"
-	execRegex := ".*"
-	cfgRegex := ".*"
-
-	if len(os.Args) >= 2 {
-		execRegex = os.Args[1]
-	}
-	if len(os.Args) >= 3 {
-		cfgRegex = os.Args[2]
-	}
-
-	log.Printf("binary regex: %s\n", execRegex)
-	log.Printf("config regex: %s\n", cfgRegex)
-
-	if len(startTimes) > 0 && len(startTimes) == len(stopTimes) {
-		log.Printf("scheduled startups: %v\n", startTimes)
-		log.Printf("scheduled shutdown: %v\n", stopTimes)
-	} else if len(startTimes) > 0 && len(startTimes) != len(stopTimes) {
-		log.Println("stat/stop times mismatch")
-		os.Exit(1)
-	}
-
-	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
-	wg := sync.WaitGroup{}
-	cfgs := constructConfigs(ctx, executablesPath, configsPath, execRegex, cfgRegex, startTimes, stopTimes)
-
-	wg.Add(len(cfgs))
-	for idx, c := range cfgs {
-		c.StartupOffset = time.Second * time.Duration(idx)
-		go func(c Config) {
-			defer wg.Done()
-
-			err := c.Run()
-			if err != nil {
-				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
-				return
-			}
-			log.Printf("successful shutdown: %s\n", c.Cmd())
-		}(c)
-	}
-
-	wg.Wait()
-	log.Println("finished execution.")
 }
