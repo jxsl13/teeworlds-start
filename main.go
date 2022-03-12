@@ -294,12 +294,14 @@ func (c *Config) Run() (err error) {
 		shutdownDeadline := c.StopTimes[idx]
 		deadlineContext, _ := context.WithDeadline(c.ShutdownContext, shutdownDeadline)
 
-		log.Printf("startup scheduled: %s: %v", c.Cmd(), offsetStartUp)
+		log.Printf("startup scheduled: %v: %s", offsetStartUp, c.Cmd())
+		after := time.After(durationUntilNextStartup)
+
 		select {
 		case <-c.ShutdownContext.Done():
 			log.Printf("shutdown: %s\n", c.Cmd())
 			return nil
-		case <-time.After(durationUntilNextStartup):
+		case <-after:
 			log.Printf("scheduled startup: %s\n", c.Cmd())
 			err := c.runSingleWithRestart(deadlineContext)
 			if err != nil {
