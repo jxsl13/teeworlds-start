@@ -87,8 +87,9 @@ func init() {
 	if len(os.Args) > 1 {
 		os.Args = os.Args[1:]
 	}
-	for idx, arg := range os.Args {
-		if idx == 0 || strings.HasPrefix(arg, "--") {
+
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "--") {
 			continue
 		}
 		args = append(args, arg)
