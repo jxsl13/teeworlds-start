@@ -170,7 +170,7 @@ func (c *Config) runSingleWithRestart(shutdownContext context.Context) (err erro
 					time.Sleep(10 * time.Second)
 				}
 			} else {
-				log.Printf("stopped: %s: reason: %v\n", c.Cmd(), err)
+				log.Printf("stopped: %s: reason: manual shutdown\n", c.Cmd())
 			}
 
 			time.Sleep(3 * time.Second)
@@ -348,6 +348,9 @@ func main() {
 	if len(os.Args) >= 3 {
 		cfgRegex = os.Args[2]
 	}
+
+	log.Printf("binary regex: %s\n", execRegex)
+	log.Printf("config regex: %s\n", cfgRegex)
 
 	os.Setenv("PATH", buildPathEnv(os.Getenv("PATH"), executablesPath))
 	wg := sync.WaitGroup{}
