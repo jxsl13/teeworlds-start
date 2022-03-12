@@ -276,6 +276,14 @@ func (c *Config) Run() (err error) {
 		return errors.New("start/stop times mismatch")
 	}
 
+	select {
+	case <-c.ShutdownContext.Done():
+		log.Printf("shutdown before starting: %s\n", c.Cmd())
+		return nil
+	case <-time.After(c.StartupOffset):
+		// make console output ordered
+	}
+
 	for idx, start := range c.StartTimes {
 		now := time.Now()
 		offsetStartUp := start.Add(c.StartupOffset)
