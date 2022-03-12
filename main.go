@@ -220,7 +220,13 @@ func (c *Config) runSingle(shutdownContext context.Context) (err error) {
 func (c *Config) Run() (err error) {
 
 	if len(c.StartTimes) == 0 {
-		return c.runSingleWithRestart(c.ShutdownContext)
+		select {
+		case <-c.ShutdownContext.Done():
+			log.Printf("shutdown before starting: %s\n", c.Cmd())
+			return nil
+		case <-time.After(c.StartupOffset):
+			return c.runSingleWithRestart(c.ShutdownContext)
+		}
 	}
 
 	// start/stop logic
