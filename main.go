@@ -87,19 +87,35 @@ func init() {
 			os.Exit(1)
 		}
 
+		formats := []string{
+			"2006-01-02-15.04.05",
+			"2006-01-02-15.04",
+			"2006-01-02-15",
+			"2006-01-02",
+		}
+
 		for idx, part := range parts {
-			t, err := time.Parse("2006-01-02-15.04.05", part)
+			var (
+				t   time.Time
+				err error
+			)
+			for _, format := range formats {
+				t, err = time.Parse(format, part)
+				if err != nil {
+					continue
+				}
+				break
+			}
+
 			if err != nil {
 				fmt.Printf("'%s' is not a valid date and time value\n", part)
 				os.Exit(1)
-			}
-			if idx%2 == 0 {
-				// start times
+			} else if idx%2 == 0 {
 				startTimes = append(startTimes, t)
 			} else {
-				// stop time
 				stopTimes = append(stopTimes, t)
 			}
+
 		}
 	}
 }
@@ -302,7 +318,7 @@ func (c *Config) Run() (err error) {
 			return nil
 		case <-time.After(durationUntilNextStartup):
 			log.Printf("scheduled startup: %s\n", c.Cmd())
-			log.Printf("will be shut down: %v: %s (%s)\n", shutdownDeadline, c.Cmd(), shutdownDeadline.Sub(time.Now()).String())
+			log.Printf("will be shut down: %v: %s (%s)\n", shutdownDeadline, c.Cmd(), time.Until(shutdownDeadline).String())
 			err := c.runSingleWithRestart(deadlineContext)
 			if err != nil {
 				log.Printf("unexpected shutdown: %s: %v\n", c.Cmd(), err)
