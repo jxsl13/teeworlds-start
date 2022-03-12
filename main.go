@@ -38,7 +38,7 @@ Usage:
 
 		You may use this flag in order to add times when the server should start and stop.
 		You can provide more than two values. The provided values must be a multiple of 2.
-	    --times '2021-04-01-13.00.00;2021-04-02-18.00.0'
+	    --times '2021-04-01-13.00.00,2021-04-02-18.00.0'
                 Start time;stop time
 	
 	1. Executable
@@ -51,7 +51,7 @@ func init() {
 
 	help := flag.Bool("help", false, "show help screen")
 	debug = flag.Bool("debug", false, "use it to show more information")
-	times := flag.String("times", "", "start;stop;start;stop.. dates in the format of 2006-12-30-15.04.05")
+	times := flag.String("times", "", "start,stop,start,stop.. dates in the format of 2006-12-30-15.04.05")
 	flag.Parse()
 
 	if help != nil && *help {
@@ -60,7 +60,7 @@ func init() {
 	}
 
 	if times != nil && *times != "" {
-		parts := strings.Split(*times, ";")
+		parts := strings.Split(*times, ",")
 		if len(parts)%2 != 0 {
 			fmt.Println("--times requires the number of dates to be a multiple of 2")
 			os.Exit(1)
