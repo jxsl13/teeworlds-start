@@ -108,7 +108,7 @@ func init() {
 			}
 
 			if err != nil {
-				fmt.Printf("'%s' is not a valid date and time value\n", part)
+				log.Printf("'%s' is not a valid date and time value\n", part)
 				os.Exit(1)
 			} else if idx%2 == 0 {
 				// startup
@@ -117,8 +117,8 @@ func init() {
 				//shutdown
 				startupSchedule := startTimes[len(startTimes)-1]
 				if startupSchedule == t || startupSchedule.After(t) {
-					fmt.Printf("WARING: shutdown schedule %s lies before or at the startup schedule %s\n", t.String(), startupSchedule.String())
-					fmt.Println("WARNING: moving shutdown schedule 5 seconds after startup schedule.")
+					log.Printf("WARING: shutdown schedule %s lies before or at the startup schedule %s\n", t.String(), startupSchedule.String())
+					log.Println("WARNING: moving shutdown schedule 5 seconds after startup schedule.")
 					t = startupSchedule.Add(5 * time.Second)
 				}
 				stopTimes = append(stopTimes, t)
