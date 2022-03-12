@@ -219,7 +219,7 @@ func (c *Config) runSingle(shutdownContext context.Context) (err error) {
 func (c *Config) Run() (err error) {
 
 	if len(c.StartTimes) == 0 {
-		return c.runSingle(c.ShutdownContext)
+		return c.runSingleWithRestart(c.ShutdownContext)
 	}
 
 	// start/stop logic
@@ -229,13 +229,15 @@ func (c *Config) Run() (err error) {
 
 	for idx, start := range c.StartTimes {
 		now := time.Now()
-		durationUntilNextStartup := start.Sub(now.Add(c.StartupOffset))
+		offsetStartUp := start.Add(c.StartupOffset)
+		durationUntilNextStartup := offsetStartUp.Sub(now)
 		if durationUntilNextStartup < 0 {
 			durationUntilNextStartup = c.StartupOffset
 		}
 		shutdownDeadline := c.StopTimes[idx]
 		deadlineContext, _ := context.WithDeadline(c.ShutdownContext, shutdownDeadline)
 
+		log.Printf("startup scheduled: %s: %v", c.Cmd(), offsetStartUp)
 		select {
 		case <-c.ShutdownContext.Done():
 			log.Printf("shutdown: %s\n", c.Cmd())
