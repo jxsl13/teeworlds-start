@@ -270,6 +270,14 @@ func (c *Config) runSingle(shutdownContext context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	cmd.Cancel = func() error {
+		err := cmd.Process.Signal(os.Interrupt)
+		if err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+
 	defer logFile.Close()
 
 	var stderr bytes.Buffer
